@@ -1,3 +1,4 @@
+import os
 import re
 from dataclasses import dataclass
 from typing import List, Literal, Optional, Dict
@@ -5,6 +6,12 @@ import pandas as pd
 import spacy
 from num2words.num2words_CH import num2words
 from py_heideltime.py_heideltime import heideltime
+
+# Resolve bundled data relative to this package, not the current working
+# directory, so detection works regardless of where it is imported from.
+_HELPER_DATA = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "helper_data"
+)
 
 
 NumberKind = Literal[
@@ -109,7 +116,7 @@ PLAIN_NUMBER_RE = re.compile(
     r"(?<!\w)(?:\d{1,3}(?:[’'.]\d{3})+(?:,\d+)?|\d+(?:,\d+)?)(?!\w)"
 )
 
-SWISS_PLZ_PLACES = list(pd.read_csv("./helper_data/PLZ_Ortschaften.csv",sep=";",decimal=",")["Ortschaftsname"].drop_duplicates().str.lower())
+SWISS_PLZ_PLACES = list(pd.read_csv(os.path.join(_HELPER_DATA, "PLZ_Ortschaften.csv"),sep=";",decimal=",")["Ortschaftsname"].drop_duplicates().str.lower())
 
 ZIP_RE_RAW = re.compile(r"\b[1-9]\d{3}\b")
 ZIP_CONTEXT_LEFT_RE = re.compile(r"(plz|PLZ|Postleitzahl|CH-?|CH\s*)\s*$", re.IGNORECASE)
