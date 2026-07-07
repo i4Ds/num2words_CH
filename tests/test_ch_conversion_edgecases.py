@@ -90,6 +90,7 @@ class TestEdgeCasesCHBS(_Base, unittest.TestCase):
 
     def test_times_swiss(self):
         self.assertIn("sechsi", self.c("Um 18:00 Uhr."))
+        self.assertIn("fünf ab zwölfi", self.c("Um 0:05."))
         self.assertIn("halb elfi", self.c("Treffpunkt 10:30."))
         self.assertIn("viertl vor achti", self.c("Es ist 7:45."))
 
@@ -99,6 +100,7 @@ class TestEdgeCasesCHSG(_Base, unittest.TestCase):
 
     def test_times_swiss(self):
         self.assertIn("sechsi", self.c("Um 18:00 Uhr."))
+        self.assertIn("füfab zwölfi", self.c("Um 0:05."))
         self.assertIn("halbi elfi", self.c("Treffpunkt 10:30."))
         self.assertIn("viertl vor achti", self.c("Es ist 7:45."))
 

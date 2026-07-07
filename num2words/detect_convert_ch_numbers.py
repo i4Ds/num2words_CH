@@ -422,6 +422,8 @@ def convert_numbers(text: str,dialect) -> str:
                     hours += 1
                 if hours > 12:
                     hours -= 12
+                if hours == 0:
+                    hours = 12
                 number = num2words(hours, to="hours", lang=dialect)
 
                 # Convert minutes
