@@ -16,11 +16,18 @@
 # MA 02110-1301 USA
 
 from __future__ import print_function, unicode_literals
+import os
 import pandas as pd
 
 import re
 
 from .lang_EU import Num2Word_EU
+
+# Resolve bundled data relative to this package, not the current working
+# directory, so the converter works regardless of where it is imported from.
+_HELPER_DATA = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "helper_data"
+)
 
 
 class Num2Word_CH_SG(Num2Word_EU):
@@ -36,7 +43,7 @@ class Num2Word_CH_SG(Num2Word_EU):
     MEGA_SUFFIX = "illion"
 
     def setup(self):
-        self.ordinal_declension = pd.read_excel("./helper_data/numbers_helper.xlsx", sheet_name="Ordinal_deklination"
+        self.ordinal_declension = pd.read_excel(os.path.join(_HELPER_DATA, "numbers_helper.xlsx"), sheet_name="Ordinal_deklination"
                                                 )[["Deklination","Genus","Kasus", "St_Gallen_short"]]
         
         self.ordinal_declension["Kasus"] = self.ordinal_declension["Kasus"].apply(str.lower)

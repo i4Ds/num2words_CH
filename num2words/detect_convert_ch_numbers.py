@@ -1,3 +1,4 @@
+import os
 import re
 from dataclasses import dataclass
 from typing import List, Literal, Optional, Dict
@@ -5,6 +6,12 @@ import pandas as pd
 import spacy
 from num2words.num2words_CH import num2words
 from py_heideltime.py_heideltime import heideltime
+
+# Resolve bundled data relative to this package, not the current working
+# directory, so detection works regardless of where it is imported from.
+_HELPER_DATA = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "helper_data"
+)
 
 
 NumberKind = Literal[
@@ -98,9 +105,18 @@ MONEY_RE = re.compile(
 MODEL_RE = re.compile(
     r"\b(?=[A-Za-z0-9_-]*[A-Za-z])(?=[A-Za-z0-9_-]*\d)[A-Za-z0-9_-]{3,}\b"
 )
-PLAIN_NUMBER_RE = re.compile(r"\d+(?:[’']\d{3})*(?:[.,]\d+)?")
+# de-CH/de number: thousands grouped by '.', apostrophe or U+2019 (1.234 / 1'234 /
+# 1’234[.567...]), optional ',' decimal; OR a plain integer with optional ',' decimal.
+# (de-CH uses ',' as the decimal mark, so a grouping '.' is always thousands.)
+# The word-char guards (\w = unicode letter/digit/_) keep alphanumeric codes
+# intact: A380, CO2, G8, 3D, A2 must NOT be read as cardinals, and a digit run
+# glued to letters must not be partially matched (e.g. the "80" inside "A380").
+# A digit run only counts as a quantity when it is a standalone token.
+PLAIN_NUMBER_RE = re.compile(
+    r"(?<!\w)(?:\d{1,3}(?:[’'.]\d{3})+(?:,\d+)?|\d+(?:,\d+)?)(?!\w)"
+)
 
-SWISS_PLZ_PLACES = list(pd.read_csv("./helper_data/PLZ_Ortschaften.csv",sep=";",decimal=",")["Ortschaftsname"].drop_duplicates().str.lower())
+SWISS_PLZ_PLACES = list(pd.read_csv(os.path.join(_HELPER_DATA, "PLZ_Ortschaften.csv"),sep=";",decimal=",")["Ortschaftsname"].drop_duplicates().str.lower())
 
 ZIP_RE_RAW = re.compile(r"\b[1-9]\d{3}\b")
 ZIP_CONTEXT_LEFT_RE = re.compile(r"(plz|PLZ|Postleitzahl|CH-?|CH\s*)\s*$", re.IGNORECASE)
@@ -260,7 +276,16 @@ def detect_number_spans(text: str) -> List[NumberSpan]:
             dct=None,
         )
         for timex in timexs:
-            if "span" in timex and isinstance(timex["span"], (list, tuple)) and timex["type"] in ["DATE", "TIME"]:
+            # Only verbalize timexes that actually contain a digit. HeidelTime
+            # also resolves purely lexical temporal expressions ("Weihnachten",
+            # "heute", "morgen") to dates; verbalizing those would replace the
+            # original word with a spoken calendar date, which we never want.
+            if (
+                "span" in timex
+                and isinstance(timex["span"], (list, tuple))
+                and timex["type"] in ["DATE", "TIME"]
+                and re.search(r"\d", timex.get("text") or "")
+            ):
                 s, e = timex["span"]
                 s -=1
                 e -=1
@@ -356,7 +381,9 @@ def convert_numbers(text: str,dialect) -> str:
         number = span.text
 
         if span.kind == "NUMBER":
-            number_str = number
+            # Strip thousands separators ('.', apostrophe, U+2019); the ',' decimal
+            # mark is kept for num2words to read as "Komma".
+            number_str = number.replace("’", "").replace("'", "").replace(".", "")
             leading_zeros = len(number_str) - len(number_str.lstrip('0'))
             
             if leading_zeros > 0:
@@ -366,7 +393,7 @@ def convert_numbers(text: str,dialect) -> str:
                 else:
                     number = zero_part + " " + num2words(number_str[leading_zeros:], lang=dialect)
             else:
-                number = num2words(number, lang=dialect)
+                number = num2words(number_str, lang=dialect)
         elif span.kind == "ZIP":
             if len(number) == 4:
                 if number[1] == "000":
@@ -378,11 +405,11 @@ def convert_numbers(text: str,dialect) -> str:
 
         elif span.kind == "PHONE":
             cleaned_number = number.replace(" ","")
-            number = ""
-            if cleaned_number.startswith("+"):
-                number = "plus"
+            parts = ["plus"] if cleaned_number.startswith("+") else []
             for digit in cleaned_number.lstrip("+"):
-                number += " " + num2words(digit, lang=dialect) 
+                if digit.isdigit():
+                    parts.append(num2words(digit, lang=dialect))
+            number = " ".join(parts)
 
         elif span.kind == "ORDINAL":
             number = num2words(number[:-1], lang=dialect, ordinal=True,declension=span.value)
@@ -395,6 +422,8 @@ def convert_numbers(text: str,dialect) -> str:
                     hours += 1
                 if hours > 12:
                     hours -= 12
+                if hours == 0:
+                    hours = 12
                 number = num2words(hours, to="hours", lang=dialect)
 
                 # Convert minutes
