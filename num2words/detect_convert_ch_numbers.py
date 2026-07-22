@@ -442,7 +442,7 @@ def convert_numbers(text: str,dialect) -> str:
             day = value.get("DAY")
             date_parts = []
             if day is not None:                
-                date_parts.append(num2words(day, lang=dialect, ordinal=True,declension= {'declension': 'gemischt', 'gender': 'masc', 'case': 'nom'}))
+                date_parts.append(num2words(day, lang=dialect, ordinal=True,declension= {'declension': 'schwach', 'gender': 'masc', 'case': 'dat'}))
             if month is not None:
                 date_parts.append(num2words(month, lang=dialect,to="month_dates"))
             if year is not None:
