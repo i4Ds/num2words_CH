@@ -105,15 +105,13 @@ MONEY_RE = re.compile(
 MODEL_RE = re.compile(
     r"\b(?=[A-Za-z0-9_-]*[A-Za-z])(?=[A-Za-z0-9_-]*\d)[A-Za-z0-9_-]{3,}\b"
 )
-# de-CH/de number: thousands grouped by '.', apostrophe or U+2019 (1.234 / 1'234 /
-# 1’234[.567...]), optional ',' decimal; OR a plain integer with optional ',' decimal.
-# (de-CH uses ',' as the decimal mark, so a grouping '.' is always thousands.)
-# The word-char guards (\w = unicode letter/digit/_) keep alphanumeric codes
-# intact: A380, CO2, G8, 3D, A2 must NOT be read as cardinals, and a digit run
-# glued to letters must not be partially matched (e.g. the "80" inside "A380").
-# A digit run only counts as a quantity when it is a standalone token.
+# de-CH/de number patterns:
+# - thousands grouped by apostrophe/U+2019 (1'234 / 1’234)
+# - decimal comma OR decimal dot (3,5 / 12.50 / 1.234)
+# - standalone integers
+# The word-char guards keep alphanumeric codes (A380, G8, 3D) untouched.
 PLAIN_NUMBER_RE = re.compile(
-    r"(?<!\w)(?:\d{1,3}(?:[’'.]\d{3})+(?:,\d+)?|\d+(?:,\d+)?)(?!\w)"
+    r"(?<!\w)(?:\d{1,3}(?:[’']\d{3})+(?:[.,]\d+)?|\d+[.,]\d+|\d+)(?!\w)"
 )
 
 SWISS_PLZ_PLACES = list(pd.read_csv(os.path.join(_HELPER_DATA, "PLZ_Ortschaften.csv"),sep=";",decimal=",")["Ortschaftsname"].drop_duplicates().str.lower())
@@ -135,10 +133,12 @@ def _is_ordinal_context(text: str, start: int, end: int):
     German ordinals are typically preceded by a determiner/article (e.g., "der 2.", "die 1.")
     or followed by a noun. Returns False if it's just a number at end of sentence.
     """    
+    default_declension = {"declension": "schwach", "gender": "masc", "case": "nom"}
+
     # Extract the number without the period
     number_match = re.match(r"(\d+)", text[start:end])
     if not number_match:
-        return False
+        return False, None
     
     number_str = number_match.group(1)
     
@@ -162,21 +162,30 @@ def _is_ordinal_context(text: str, start: int, end: int):
         return False,None
     
     prev_token = ordinal_token.nbor(-1) if ordinal_token.i > 0 else None
-    if prev_token and prev_token.pos_ in ["DET", "ADP"]:
+    next_token = ordinal_token.nbor(1) if ordinal_token.i < len(doc) - 1 else None
+
+    # Typical ordinal cues in German: article/preposition before, or noun after.
+    if (prev_token and prev_token.pos_ in ["DET", "ADP"]) or (next_token and next_token.pos_ in ["NOUN", "PROPN"]):
+        decl = default_declension.copy()
         try:
-            declension_type = get_declension_type(ordinal_token)
-            gender = ordinal_token.morph.get("Gender")[0]
-            case = ordinal_token.morph.get("Case")[0]
+            decl["declension"] = get_declension_type(ordinal_token).lower()
+        except Exception:
+            pass
 
-            if ordinal_token.morph.get("Number") == ["Plur"]:
-                gender = "Plur"
-            return True,{"declension":declension_type.lower(),"gender":gender.lower(),"case":case.lower()}
+        source_for_morph = prev_token if (prev_token and prev_token.pos_ == "DET") else next_token
+        if source_for_morph is not None:
+            genders = source_for_morph.morph.get("Gender")
+            cases = source_for_morph.morph.get("Case")
+            numbers = source_for_morph.morph.get("Number")
+            if numbers == ["Plur"]:
+                decl["gender"] = "plur"
+            elif genders:
+                decl["gender"] = genders[0].lower()
+            if cases:
+                decl["case"] = cases[0].lower()
+        return True, decl
 
-        except:
-            return False,None
-            
-    
-    return False,None
+    return False, None
 
 
 def _has_place_after(text: str, end: int) -> bool:
@@ -248,21 +257,20 @@ def _add_matches(text: str, regex, kind: NumberKind, out: List[NumberSpan]):
             is_ordinal, type_of_ordinal = _is_ordinal_context(text, m.start(), m.end())
             if not is_ordinal:
                 continue  # Skip this match if it's not a true ordinal
-            else:
-                out.append(NumberSpan(
-                    kind=kind,
-                    text=m.group(0),
-                    start=m.start(),
-                    end=m.end(),
-                    value=type_of_ordinal
-                ))
-        
-        out.append(NumberSpan(
-            kind=kind,
-            text=m.group(0),
-            start=m.start(),
-            end=m.end(),
-        ))
+            out.append(NumberSpan(
+                kind=kind,
+                text=m.group(0),
+                start=m.start(),
+                end=m.end(),
+                value=type_of_ordinal
+            ))
+        else:
+            out.append(NumberSpan(
+                kind=kind,
+                text=m.group(0),
+                start=m.start(),
+                end=m.end(),
+            ))
 
 
 def detect_number_spans(text: str) -> List[NumberSpan]:
@@ -381,9 +389,17 @@ def convert_numbers(text: str,dialect) -> str:
         number = span.text
 
         if span.kind == "NUMBER":
-            # Strip thousands separators ('.', apostrophe, U+2019); the ',' decimal
-            # mark is kept for num2words to read as "Komma".
-            number_str = number.replace("’", "").replace("'", "").replace(".", "")
+            # Normalize separators for num2words:
+            # - keep decimal separator by turning '.' decimals into ','
+            # - remove thousands separators (apostrophe/U+2019)
+            number_str = number.replace("’", "").replace("'", "")
+            if "," in number_str:
+                integer_part, comma, fraction_part = number_str.partition(",")
+                integer_part = integer_part.replace(".", "")
+                number_str = integer_part + comma + fraction_part
+            elif re.fullmatch(r"\d+\.\d+", number_str):
+                number_str = number_str.replace(".", ",", 1)
+
             leading_zeros = len(number_str) - len(number_str.lstrip('0'))
             
             if leading_zeros > 0:
@@ -441,11 +457,12 @@ def convert_numbers(text: str,dialect) -> str:
             month = value.get("MONTH")
             day = value.get("DAY")
             date_parts = []
+            has_explicit_year = re.search(r"\b\d{4}\b", span.text or "") is not None
             if day is not None:                
                 date_parts.append(num2words(day, lang=dialect, ordinal=True,declension= {'declension': 'schwach', 'gender': 'masc', 'case': 'dat'}))
             if month is not None:
                 date_parts.append(num2words(month, lang=dialect,to="month_dates"))
-            if year is not None:
+            if year is not None and has_explicit_year:
                 year = str(year)
                 if (len(year) == 4) and (int(year) <= 1999):
                     date_parts.append(num2words(year[:2], lang=dialect) + " " + num2words(year[2:], lang=dialect))
