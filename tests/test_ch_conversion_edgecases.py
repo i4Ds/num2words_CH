@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Edge-case regression tests for convert_numbers (ch_bs + ch_sg).
+"""Edge-case regression tests for convert_numbers (ch_bs + ch_sg + ch_zh).
 
 These lock in the reliability fixes:
   * DATE over-eagerness: HeidelTime tags holidays / relative words
@@ -103,6 +103,20 @@ class TestEdgeCasesCHSG(_Base, unittest.TestCase):
         self.assertIn("füfab zwölfi", self.c("Um 0:05."))
         self.assertIn("halbi elfi", self.c("Treffpunkt 10:30."))
         self.assertIn("viertl vor achti", self.c("Es ist 7:45."))
+
+
+class TestEdgeCasesCHZH(unittest.TestCase):
+    def c(self, text):
+        return convert_numbers(text, "ch_zh")
+
+    def test_plain_number(self):
+        self.assertEqual(self.c("Ich habe 5 Äpfel."), "Ich habe foif Äpfel.")
+
+    def test_times_swiss(self):
+        self.assertIn("sachsi", self.c("Um 18:00 Uhr."))
+        self.assertIn("foif ab zwölfi", self.c("Um 0:05."))
+        self.assertIn("halbi elfi", self.c("Treffpunkt 10:30."))
+        self.assertIn("viertel vor achti", self.c("Es ist 7:45."))
 
 
 if __name__ == "__main__":

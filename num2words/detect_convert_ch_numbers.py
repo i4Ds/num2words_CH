@@ -449,7 +449,9 @@ def convert_numbers(text: str,dialect) -> str:
                 
                 # Convert seconds if present
                 if seconds is not None and seconds > 0:
-                    number += " " + num2words(seconds, lang=dialect) + num2words("sek",to="lookup", dialect="ch_bs")
+                    number += " " + num2words(seconds, lang=dialect) + " " + num2words(
+                        "sek", to="lookup", lang=dialect
+                    )
                 
         elif span.kind == "DATE": # TODO: include declension
             value = span.value

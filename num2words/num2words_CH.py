@@ -17,9 +17,7 @@
 
 from __future__ import unicode_literals
 
-from num2words import lang_CH_BS
-
-from . import ( lang_DE, lang_EN, lang_FR, lang_IT,lang_CH_BS,lang_CH_SG)
+from . import lang_CH_BS, lang_CH_SG, lang_CH_ZH, lang_DE, lang_EN, lang_FR, lang_IT
 
 CONVERTER_CLASSES = {
 
@@ -28,7 +26,8 @@ CONVERTER_CLASSES = {
     # 'fr': lang_FR.Num2Word_FR(), 
     # 'it': lang_IT.Num2Word_IT(),
     "ch_bs":lang_CH_BS.Num2Word_CH_BS(),
-    "ch_sg":lang_CH_SG.Num2Word_CH_SG()
+    "ch_sg":lang_CH_SG.Num2Word_CH_SG(),
+    "ch_zh":lang_CH_ZH.Num2Word_CH_ZH(),
 }
 
 CONVERTES_TYPES = ['cardinal', 'ordinal', 'ordinal_num', 'year', 'currency', "minutes", "hours","lookup","month_dates"]

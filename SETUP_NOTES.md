@@ -45,7 +45,8 @@ target the upstream `num2words` package API that this fork restructured.
 
 ## Status (what works)
 
-`convert_numbers(text, dialect)` for `dialect in {"ch_bs", "ch_sg"}` reliably handles:
+`convert_numbers(text, dialect)` for
+`dialect in {"ch_bs", "ch_sg", "ch_zh"}` handles:
 
 - plain / large numbers, de-CH thousands (`1.234`, `1'000`) and `,` decimals (`1.234,56`)
 - dates (`24.12.2024`, `25.5.13`, `1. Januar 2020`, year-only) via HeidelTime
