@@ -46,7 +46,7 @@ target the upstream `num2words` package API that this fork restructured.
 ## Status (what works)
 
 `convert_numbers(text, dialect)` for
-`dialect in {"ch_bs", "ch_sg", "ch_zh"}` handles:
+`dialect in {"ch_bs", "ch_sg", "ch_zh", "ch_lu", "ch_be"}` handles:
 
 - plain / large numbers, de-CH thousands (`1.234`, `1'000`) and `,` decimals (`1.234,56`)
 - dates (`24.12.2024`, `25.5.13`, `1. Januar 2020`, year-only) via HeidelTime
@@ -56,8 +56,42 @@ target the upstream `num2words` package API that this fork restructured.
 - lexical/relative temporals (`Weihnachten`, `heute`, `morgen`) left untouched —
   only digit-bearing DATE/TIME spans are verbalized
 
+Luzern (`ch_lu`) and Bern (`ch_be`) have standalone dialect modules, with
+spellings transcribed from `Luzerndeutsch_lf.xlsx` and `Bärndütsch-übersetzt.csv`.
+These two source files can be deleted after setup: neither the converters nor
+their tests read them. Keep the existing `numbers_helper.xlsx` and
+`PLZ_Ortschaften.csv`, which the other dialects and detection pipeline still use.
+Both new dialects support the same `num2words` and `convert_numbers` APIs:
+
+```python
+from num2words.num2words_CH import num2words
+from num2words.detect_convert_ch_numbers import convert_numbers
+
+num2words(132, lang="ch_lu")  # eihondertzwoiedriisg
+num2words(132, lang="ch_be")  # hundertzwöiedrissg
+convert_numbers("Um 14:45", "ch_lu")  # Um viertelvor drü
+convert_numbers("Um 14:45", "ch_be")  # Um viertäl vor drü
+```
+
+Number words are lowercased and trimmed. Explicit compound examples retain
+the reference spelling, even where it differs from the individual digits.
+Ordinal endings were transcribed from the 48 translated grammar examples;
+unlisted forms are generated from these patterns. Source spelling variations
+(such as Bern's `zweite` alongside `zwöite`) are preserved in the references.
+The existing pipeline treats midnight as hour 12 (`zwölfi`), even though the
+new references also list a separate midnight word.
+
+Run the Luzern/Bern reference and pipeline checks with:
+
+```bash
+JAVA_HOME="$CONDA_PREFIX/lib/jvm" python -m pytest tests/test_ch_lu_be_conversion.py -v
+```
+
 ## Known limitations
 
+- **Mixed dot thousands and comma decimals** (`1.234,56`) can be split by
+  temporal detection before numeric conversion, leaving a comma behind.
+  The existing Basel/St. Gallen edge-case tests reproduce this failure.
 - **German (`lang='de'`) is not supported by `convert_numbers`** — `'de'` is
   commented out of `CONVERTER_CLASSES` (num2words_CH.py) and the type-aware
   date/time/ordinal verbalization is only implemented for the Swiss dialects.
